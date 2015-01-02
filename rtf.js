@@ -8,9 +8,8 @@ var copy = function(ops) {
     return ret;
 };
 
-var Block = function (parent, idx) {
+var Block = function (parent) {
     this.s = [];
-    this.start_ct = idx;
     this.parent = parent;
     if (parent) {
         parent.s.push(this);
@@ -30,23 +29,22 @@ var STATE_EMPTY = 0,
     STATE_READ_ARG = 2,
     STATE_CONTENT = 8;
 
-var parse = function (buf) {
+var tokenise = function (buf) {
     if (!buf || !Buffer.isBuffer(buf)) {
         throw new Error("Pass rtf as buffer");
     }
+    var ret = [];
     var idx = 0;
     var end = buf.length;
     var cr;
-    var cr_block;
     var state = STATE_CONTENT;
     var op_name;
     var op_arg;
     var content;
+    var start_ct = 0;
     if (buf[idx] !== 0x7B) {
         throw new Error("Broken header");
     }
-
-    cr_block = new Block(null, idx);
 
     while (idx < end) {
         cr = buf[idx];
@@ -58,16 +56,17 @@ var parse = function (buf) {
                 op_name = new Buffer(20);
                 op_name.pos = 0;
             } else if (cr === 0x7B) { // ord('{')
-                cr_block = new Block(cr_block, idx+1);
+                start_ct = idx + 1;
                 state = STATE_CONTENT;
+                ret.push({block: 'push'});
             } else if (cr === 0x7D) { // ord('}')
-                cr_block = cr_block.parent;
-                cr_block.start_ct = idx + 1;
+                start_ct = idx + 1;
+                ret.push({block: 'pop'});
             }
 
-            if (state !== STATE_CONTENT && cr_block.start_ct !== idx) {
-                content = buf.slice(cr_block.start_ct, idx);
-                cr_block.s.push(new Text(content, cr_block.ops));
+            if (state !== STATE_CONTENT && start_ct !== idx) {
+                content = buf.slice(start_ct, idx);
+                ret.push({text: content});
             }
 
             idx ++;
@@ -90,7 +89,8 @@ var parse = function (buf) {
             if (cr === 0x20 && op_arg.pos === 0) {
                 idx ++;
                 state = STATE_CONTENT;
-                cr_block.start_ct = idx;
+                start_ct = idx;
+                ret.push({tag: op_name, arg: 1});
             } else if (cr >= 0x30 && cr <= 0x39) {
                 op_arg[op_arg.pos++] = cr;
                 idx ++;
@@ -99,19 +99,42 @@ var parse = function (buf) {
                 idx ++;
             } else {
                 if (op_arg.pos === 0) {
-                    cr_block.ops[op_name] = 1;
+                    ret.push({tag: op_name, arg: 1});
                 } else {
                     op_arg = op_arg.slice(0, op_arg.pos).toString();
-                    cr_block.ops[op_name] = Number(op_arg);
+                    ret.push({tag: op_name, arg: Number(op_arg)});
                 }
                 state = STATE_CONTENT;
-                cr_block.start_ct = idx;
+                start_ct = idx;
             }
             break;
         default:
             throw new Error("Unknown state", state);
         }
 
+    }
+
+    return ret;
+};
+
+var parse = function (buf) {
+    var tokens = tokenise(buf);
+    var tok;
+    var idx;
+    var len = tokens.length;
+    var cr_block = new Block(null, 0);
+
+    for (idx = 0; idx < len; idx++) {
+        tok = tokens[idx];
+        if (tok.block === 'push') {
+            cr_block = new Block(cr_block, 0);
+        } else if (tok.block === 'pop') {
+            cr_block = cr_block.parent;
+        } else if (tok.text) {
+            cr_block.s.push(new Text(tok.text, cr_block.ops));
+        } else if (tok.tag) {
+            cr_block.ops[tok.tag] = tok.arg;
+        }
     }
 
     cr_block = cr_block.s[0];
@@ -121,4 +144,5 @@ var parse = function (buf) {
 
 module.exports = {
     parse: parse,
+    tokenise: tokenise,
 };
