@@ -1,0 +1,18 @@
+{
+  "name": "rtf.js",
+  "version": "0.1.0",
+  "description": "RTF Parser",
+  "main": "rtf.js",
+  "dependencies": {
+    "iconv-lite": "^0.4.5"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "rtf"
+  ],
+  "author": "Ilya Petrov",
+  "license": "BSD"
+}
