@@ -27,11 +27,22 @@ var text = function (text, ops) {
     };
 };
 
+var utext = function (text, ops) {
+    return {
+        utext: text,
+        ops: copy(ops),
+    };
+};
+
 var cmd = function (cmd, arg) {
     return {
         tag: cmd,
         arg: arg,
     };
+};
+
+var u = function (un) {
+    return String.fromCharCode(un);
 };
 
 var STATE_EMPTY = 0,
@@ -133,6 +144,8 @@ var tags = {
     page: 'cmd',
     rtf: 'cmd',
     ansi: 'cmd',
+    fonttbl: 'cmd',
+    colortbl: 'cmd',
     ansicpg: 'meta',
     deff: 'meta',
     paperw: 'meta',
@@ -151,6 +164,8 @@ var parse = function (buf) {
     var cr_block = block(null);
     var meta = {};
     var tag_typ;
+    var last;
+    var skip_text = 0;
 
     for (idx = 0; idx < len; idx++) {
         tok = tokens[idx];
@@ -159,7 +174,20 @@ var parse = function (buf) {
         } else if (tok.block === 'pop') {
             cr_block = cr_block.parent;
         } else if (tok.text) {
-            cr_block.s.push(text(tok.text, cr_block.ops));
+            cr_block.s.push(text(tok.text.slice(skip_text), cr_block.ops));
+            skip_text = 0;
+        } else if (tok.tag === 'u') {
+            if (cr_block.s.length > 0) {
+                last = cr_block.s[cr_block.s.length - 1];
+                if (last.utext === undefined) {
+                    cr_block.s.push(utext(u(tok.arg), cr_block.ops));
+                } else {
+                    last.utext += u(tok.arg);
+                }
+            } else {
+                cr_block.s.push(utext(u(tok.arg), cr_block.ops));
+            }
+            skip_text = 1;
         } else if (tok.tag) {
             tag_typ = tags[tok.tag];
             if (tag_typ === 'meta') {
