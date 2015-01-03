@@ -8,20 +8,30 @@ var copy = function(ops) {
     return ret;
 };
 
-var Block = function (parent) {
-    this.s = [];
-    this.parent = parent;
+var block = function (parent) {
+    var ret = {
+        s: [],
+        parent: parent,
+        ops: parent ? copy(parent.ops) : {},
+    };
     if (parent) {
-        parent.s.push(this);
-        this.ops = copy(parent.ops);
-    } else {
-        this.ops = {};
+        parent.s.push(ret);
     }
+    return ret;
 };
 
-var Text = function (text, ops) {
-    this.text = text;
-    this.ops = copy(ops);
+var text = function (text, ops) {
+    return {
+        text: text,
+        ops: copy(ops),
+    };
+};
+
+var cmd = function (cmd, arg) {
+    return {
+        tag: cmd,
+        arg: arg,
+    };
 };
 
 var STATE_EMPTY = 0,
@@ -117,28 +127,54 @@ var tokenise = function (buf) {
     return ret;
 };
 
+var tags = {
+    plain: 'cmd',
+    par: 'cmd',
+    page: 'cmd',
+    rtf: 'cmd',
+    ansi: 'cmd',
+    ansicpg: 'meta',
+    deff: 'meta',
+    paperw: 'meta',
+    paperh: 'meta',
+    margl: 'meta',
+    margr: 'meta',
+    margt: 'meta',
+    margb: 'meta',
+};
+
 var parse = function (buf) {
     var tokens = tokenise(buf);
     var tok;
     var idx;
     var len = tokens.length;
-    var cr_block = new Block(null, 0);
+    var cr_block = block(null);
+    var meta = {};
+    var tag_typ;
 
     for (idx = 0; idx < len; idx++) {
         tok = tokens[idx];
         if (tok.block === 'push') {
-            cr_block = new Block(cr_block, 0);
+            cr_block = block(cr_block);
         } else if (tok.block === 'pop') {
             cr_block = cr_block.parent;
         } else if (tok.text) {
-            cr_block.s.push(new Text(tok.text, cr_block.ops));
+            cr_block.s.push(text(tok.text, cr_block.ops));
         } else if (tok.tag) {
-            cr_block.ops[tok.tag] = tok.arg;
+            tag_typ = tags[tok.tag];
+            if (tag_typ === 'meta') {
+                meta[tok.tag] = tok.arg;
+            } else if (tag_typ === 'cmd') {
+                cr_block.s.push(cmd(tok.tag, tok.arg));
+            } else {
+                cr_block.ops[tok.tag] = tok.arg;
+            }
         }
     }
 
     cr_block = cr_block.s[0];
     delete cr_block.parent;
+    cr_block.meta = meta;
     return cr_block;
 };
 

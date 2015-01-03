@@ -10,12 +10,13 @@ var cr, idx = 0, text;
 
 var cp = 'latin1';
 
-if (root.ops.ansicpg) {
-    cp = 'windows' + root.ops.ansicpg;
+if (root.meta.ansicpg) {
+    cp = 'windows' + root.meta.ansicpg;
 }
 var st = [],
     pc = {idx: 0, ob: root};
 
+var out = '';
 while ((pc.idx < pc.ob.s.length) || (pc = st.pop())) {
     cr = pc.ob.s[pc.idx++];
     if (cr === undefined) {
@@ -23,9 +24,18 @@ while ((pc.idx < pc.ob.s.length) || (pc = st.pop())) {
     }
     if (Buffer.isBuffer(cr.text)) {
         text = inconv.decode(cr.text, cp);
-        console.log(cr.ops, text);
+        out += text;
     } else if (cr.s) {
         st.push(pc);
         pc = {idx:0, ob: cr};
+    } else if (cr.tag) {
+        if (cr.tag === 'par') {
+            out += '\n';
+        }
+        if (cr.tag === 'page') {
+            out += '\n\n';
+        }
     }
 }
+
+console.log(out);
